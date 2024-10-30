@@ -47,9 +47,6 @@ const Home = () => {
               <Link to={`/posts/${post._id}`}>
                 <Button variant="outline">View Details</Button>
               </Link>
-              {user && (
-                <Button variant="secondary" onClick={() => console.log(`Start chat with ${post.postedBy}`)}>Start Chat</Button>
-              )}
             </CardFooter>
           </Card>
         ))}

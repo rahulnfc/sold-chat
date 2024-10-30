@@ -1,13 +1,16 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { ChevronLeft, Send, Menu, X } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import axios from 'axios';
 import io from 'socket.io-client';
 import { Input } from './ui/input';
 import { Button } from './ui/button';
+import { useNavigate, useParams } from 'react-router-dom';
 
 const ResponsiveChatInterface = () => {
   const { user } = useAuth();
+  const { id } = useParams();
+  const navigate = useNavigate();
   const [conversations, setConversations] = useState([]);
   const [messages, setMessages] = useState([]);
   const [socket, setSocket] = useState(null);
@@ -15,135 +18,145 @@ const ResponsiveChatInterface = () => {
   const [selectedChat, setSelectedChat] = useState(null);
   const [message, setMessage] = useState('');
   const [isTyping, setIsTyping] = useState(false);
+  const [conversationPage, setConversationPage] = useState(1);
+  const [messagePage, setMessagePage] = useState(1);
   const typingTimeoutRef = useRef(null);
   const messagesEndRef = useRef(null);
 
-  useEffect(() => {
-    const fetchConversations = async () => {
-      try {
-        const headers = { Authorization: `Bearer ${user.token}` };
-        const response = await axios.get('http://localhost:8000/api/conversations?page=1&limit=10', { headers });
-        setConversations(response.data.data);
-      } catch (err) {
-        console.error('Failed to fetch conversations', err);
-      }
-    };
-    fetchConversations();
-  }, [user]);
+  const headers = useMemo(() => ({ Authorization: `Bearer ${user?.token}` }), [user]);
 
-  console.log(JSON.stringify(user, null, 2))
-
-  const chatList = conversations.map(conversation => ({
-    id: conversation._id,
-    title: conversation.postId.title,
-    user: conversation.participants.find(participant => participant._id !== user.id).name,
-    time: conversation.lastMessage.timestamp ? new Date(conversation.lastMessage.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "",
-    message: conversation.lastMessage?.message || "",
-    name: conversation.lastMessage?.senderId?._id === user.id ? "You" : conversation.lastMessage.senderId.name || ""
-  }));
-
-  const fetchMessages = async (chatId) => {
+  const fetchConversations = useCallback(async (page) => {
     try {
-      const headers = { Authorization: `Bearer ${user.token}` };
-      const response = await axios.get(`http://localhost:8000/api/messages/${chatId}?page=1&limit=10`, { headers });
-      setMessages(response.data.data);
+      const response = await axios.get(`http://localhost:8000/api/conversations?page=${page}&limit=10`, { headers });
+      const newConversations = response.data.data;
+
+      setConversations(prev => [
+        ...prev.filter(prevConvo => !newConversations.some(newConvo => newConvo._id === prevConvo._id)),
+        ...newConversations,
+      ]);
+    } catch (err) {
+      console.error('Failed to fetch conversations', err);
+    }
+  }, [headers]);
+
+  const fetchMessages = useCallback(async (chatId, page) => {
+    try {
+      const response = await axios.get(`http://localhost:8000/api/messages/${chatId}?page=${page}&limit=10`, { headers });
+      const newMessages = response.data.data;
+      setMessages(prev => [
+        ...prev.filter(prevMessage => !newMessages.some(newMessage => newMessage._id === prevMessage._id)),
+        ...newMessages]);
     } catch (err) {
       console.error('Failed to fetch messages', err);
     }
+  }, [headers]);
+
+  useEffect(() => {
+    fetchConversations(conversationPage);
+  }, [fetchConversations, conversationPage]);
+
+  const chatList = useMemo(() => conversations.map(convo => ({
+    id: convo._id,
+    title: convo.postId.title,
+    user: convo.participants.find(participant => participant._id !== user.id)?.name,
+    time: convo.lastMessage?.timestamp ? new Date(convo.lastMessage.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "",
+    message: convo.lastMessage?.message || "",
+    name: convo.lastMessage?.senderId?._id === user.id ? "You" : convo.lastMessage?.senderId?.name || ""
+  })), [conversations, user.id]);
+
+  const handleChatSelect = (chat) => {
+    setSelectedChat(chat);
+    setMessages([]);
+    setMessagePage(1);
+    fetchMessages(chat.id, 1);
+    setIsSidebarOpen(false);
   };
 
   useEffect(() => {
     if (!user || !user.token) return;
 
-    const newSocket = io('http://localhost:8000', {
-      auth: {
-        token: user.token,
-      },
-    });
-
+    const newSocket = io('http://localhost:8000', { auth: { token: user.token } });
     setSocket(newSocket);
 
-    newSocket.emit('join:conversations', conversations.map(convo => convo._id));
+    if (selectedChat?.id) newSocket.emit('join:conversation', selectedChat.id);
 
     newSocket.on('message:new', (data) => {
-      setMessages((prev) => [...prev, data.message]);
+      setMessages(prev => [...prev, data.message]);
     });
 
-    newSocket.on('conversation:typing', ({ conversationId, userId, isTyping }) => {
-      if (conversationId === selectedChat?.id) {
-        setIsTyping(isTyping);
-      }
+    newSocket.on('conversation:typing', ({ conversationId, isTyping }) => {
+      if (conversationId === selectedChat?.id) setIsTyping(isTyping);
     });
 
     newSocket.on('message:read', ({ conversationId, messageIds, readAt }) => {
       if (selectedChat?.id === conversationId) {
-        setMessages((prev) =>
-          prev.map((msg) => messageIds.includes(msg._id) ? { ...msg, status: 'read', readAt } : msg)
-        );
+        setMessages(prev => prev.map(msg => 
+          messageIds.includes(msg._id) ? { ...msg, status: 'read', readAt } : msg
+        ));
       }
     });
 
     return () => newSocket.close();
-  }, [user, conversations, selectedChat, messages]);
+  }, [user, selectedChat?.id]);
 
-  const handleChatSelect = (chat) => {
-    setSelectedChat(chat);
-    fetchMessages(chat.id);
-    setIsSidebarOpen(false);
-  };
+  useEffect(() => {
+    if (id) {
+      const chat = chatList.find(c => c.id === id);
+      if (chat) handleChatSelect(chat);
+    }
+  }, [chatList, id]);
 
   const handleSendMessage = () => {
-    if (message.trim() && socket) {
-      socket.emit('message:send', {
-        conversationId: selectedChat.id,
-        content: message,
-      });
+    if (message.trim() && socket && selectedChat) {
+      socket.emit('message:send', { conversationId: selectedChat.id, content: message });
       setMessage('');
     }
   };
 
   const handleTyping = () => {
-    if (socket) {
+    if (socket && selectedChat) {
       socket.emit('typing:start', selectedChat.id);
       clearTimeout(typingTimeoutRef.current);
-
       typingTimeoutRef.current = setTimeout(() => {
         socket.emit('typing:stop', selectedChat.id);
       }, 1000);
     }
   };
 
-  const handleMarkMessagesAsRead = () => {
-    const unreadMessages = messages.filter((msg) => msg.status !== 'read' && msg.senderId._id !== user.id);
-    if (unreadMessages.length && socket) {
-      const messageIds = unreadMessages.map((msg) => msg._id);
-      socket.emit('message:read', {
-        conversationId: selectedChat.id,
-        messageIds
-      });
+  const handleMarkMessagesAsRead = useCallback(() => {
+    const unreadMessages = messages.filter(msg => msg.status !== 'read' && msg.senderId._id !== user.id);
+    if (unreadMessages.length && socket && selectedChat) {
+      const messageIds = unreadMessages.map(msg => msg._id);
+      socket.emit('message:read', { conversationId: selectedChat.id, messageIds });
+    }
+  }, [messages, selectedChat, socket, user.id]);
+
+  useEffect(() => {
+    if (selectedChat) handleMarkMessagesAsRead();
+  }, [selectedChat, messages, handleMarkMessagesAsRead]);
+
+  // Infinite scrolling for conversations
+  const handleConversationScroll = (e) => {
+    if (e.target.scrollTop + e.target.clientHeight >= e.target.scrollHeight - 100) {
+      setConversationPage(prevPage => prevPage + 1);
     }
   };
 
-  useEffect(() => {
-    if (selectedChat) {
-      handleMarkMessagesAsRead();
+  // Infinite scrolling for messages
+  const handleMessagesScroll = (e) => {
+    if (e.target.scrollTop === 0 && selectedChat) {
+      setMessagePage(prevPage => prevPage + 1);
+      fetchMessages(selectedChat.id, messagePage + 1);
     }
-  }, [selectedChat, messages]);
+  };
 
   return (
     <div className="flex h-screen bg-gray-100">
-      {/* Mobile Menu Button */}
-      <button
-        onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-        className="lg:hidden absolute top-4 left-4 z-50 p-2 rounded-lg bg-white shadow"
-      >
+      <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="lg:hidden absolute top-4 left-4 z-50 p-2 rounded-lg bg-white shadow">
         {isSidebarOpen ? <X /> : <Menu />}
       </button>
 
-      {/* Sidebar */}
-      <div
-        className={`${isSidebarOpen ? "translate-x-0" : "-translate-x-full"} lg:translate-x-0 fixed lg:static w-full lg:w-1/3 h-full bg-white border-r border-gray-200 transition-transform duration-300 ease-in-out z-40`}
-      >
+      <div onScroll={handleConversationScroll} className={`${isSidebarOpen ? "translate-x-0" : "-translate-x-full"} lg:translate-x-0 fixed lg:static w-full lg:w-1/3 h-full bg-white border-r border-gray-200 transition-transform duration-300 ease-in-out z-40`}>
         <div className="p-4 border-b border-gray-200">
           <div className="flex items-center">
             <ChevronLeft className="h-6 w-6 text-gray-600" />
@@ -154,7 +167,7 @@ const ResponsiveChatInterface = () => {
           {chatList.map((chat) => (
             <div
               key={chat.id}
-              onClick={() => handleChatSelect(chat)}
+              onClick={() => navigate(`/chats/${chat.id}`)}
               className={`flex items-center p-4 border-b border-gray-200 cursor-pointer hover:bg-gray-50 transition-colors duration-200 ${selectedChat?.id === chat.id ? "bg-gray-50" : ""}`}
             >
               <div className="w-12 h-12 bg-gray-200 rounded-md"></div>
@@ -163,64 +176,41 @@ const ResponsiveChatInterface = () => {
                   <h3 className="text-sm font-medium">{chat.title}</h3>
                   <span className="text-xs text-gray-500">{chat.time}</span>
                 </div>
-                <p className="text-sm text-gray-500 mt-1">{`${chat.name}: ${chat.message}`}</p>
+                {chat.name && <p className="text-sm text-gray-500 mt-1">{`${chat.name}: ${chat.message}`}</p>}
               </div>
             </div>
           ))}
         </div>
       </div>
 
-      {/* Chat Area */}
       <div className="flex-1 flex flex-col">
         {selectedChat && (
           <>
-            {/* Chat Header */}
             <div className="p-4 border-b border-gray-200 bg-white">
               <div className="flex items-center">
                 <div className="w-10 h-10 bg-gray-200 rounded-md"></div>
                 <div className="ml-3">
                   <h2 className="text-lg font-medium">{selectedChat?.title}</h2>
-                  {isTyping
-                    ? <p className="text-xs italic text-gray-500">{selectedChat?.user} is typing...</p>
-                    : <p className="text-sm text-gray-500">{selectedChat?.user}</p>
-                  }
+                  {isTyping ? <p className="text-xs italic text-gray-500">{selectedChat?.user} is typing...</p> : <p className="text-sm text-gray-500">{selectedChat?.user}</p>}
                 </div>
               </div>
             </div>
 
-            {/* Messages */}
-            <div className="flex-1 overflow-y-auto p-4 bg-gray-50">
-              {messages.map((message, index) => (
-                <div
-                  key={index}
-                  className={`flex ${message.senderId._id === user.id ? "justify-end" : "justify-start"} mb-4`}
-                >
-                  <div
-                    className={`max-w-[70%] rounded-lg p-3 ${message.senderId._id === user.id
-                        ? "bg-gray-200 text-black"
-                        : "bg-red-500 text-white"
-                      }`}
-                  >
-                    <p className="text-sm break-words">{message.content}</p>
-                    <span className="text-xs mt-1 block opacity-70">
-                      {new Date(message.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                    </span>
+            <div onScroll={handleMessagesScroll} className="flex-1 overflow-y-auto p-4 bg-gray-50">
+              {messages.map((msg, index) => (
+                <div key={msg._id} className={`flex ${msg.senderId._id === user.id ? "justify-end" : "justify-start"} mb-4`}>
+                  <div className={`max-w-[70%] rounded-lg p-3 ${msg.senderId._id === user.id ? "bg-gray-200 text-black" : "bg-red-500 text-white"}`}>
+                    <p className="text-sm break-words">{msg.content}</p>
+                    <span className="text-xs mt-1 block opacity-70">{new Date(msg.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                   </div>
                 </div>
               ))}
               <div ref={messagesEndRef} />
             </div>
 
-            {/* Message Input */}
             <div className="p-4 border-t">
               <div className="flex gap-2">
-                <Input
-                  value={message}
-                  onChange={(e) => setMessage(e.target.value)}
-                  placeholder="Type a message..."
-                  onKeyPress={handleTyping}
-                  onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
-                />
+                <Input value={message} onChange={(e) => setMessage(e.target.value)} placeholder="Type a message..." onKeyPress={handleTyping} onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()} />
                 <Button onClick={handleSendMessage}>Send</Button>
               </div>
             </div>
