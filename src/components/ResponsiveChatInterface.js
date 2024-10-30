@@ -34,7 +34,7 @@ const ResponsiveChatInterface = () => {
     setIsFetchingConversations(true);
     
     try {
-      const response = await axios.get(`http://localhost:8000/api/conversations?page=${page}&limit=10`, { headers });
+      const response = await axios.get(`http://user.sold.dxg.world/api/conversations?page=${page}&limit=10`, { headers });
       const newConversations = response.data.data.conversations;
       setTotalConversations(response.data.data.totalCount);
       setConversations(prev => [
@@ -53,7 +53,7 @@ const ResponsiveChatInterface = () => {
     setIsFetchingMessages(true);
     
     try {
-      const response = await axios.get(`http://localhost:8000/api/messages/${chatId}?page=${page}&limit=10`, { headers });
+      const response = await axios.get(`http://user.sold.dxg.world/api/messages/${chatId}?page=${page}&limit=10`, { headers });
       const newMessages = response.data.data.messages;
       setTotalMessages(response.data.data.totalCount);
       setMessages(prev => [
@@ -91,7 +91,7 @@ const ResponsiveChatInterface = () => {
   useEffect(() => {
     if (!user || !user.token) return;
 
-    const newSocket = io('http://localhost:8000', { auth: { token: user.token } });
+    const newSocket = io('http://user.sold.dxg.world', { auth: { token: user.token } });
     setSocket(newSocket);
 
     if (selectedChat?.id) newSocket.emit('join:conversation', selectedChat.id);

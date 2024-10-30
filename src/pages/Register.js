@@ -45,7 +45,7 @@ const Register = () => {
     }
 
     try {
-      const response = await axios.post('http://localhost:8000/api/auth/register', {
+      const response = await axios.post('http://user.sold.dxg.world/api/auth/register', {
         name: formData.name,
         email: formData.email,
         password: formData.password,

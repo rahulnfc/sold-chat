@@ -14,7 +14,7 @@ const PostDetail = () => {
 
   const fetchPost = useCallback(async () => {
     try {
-      const response = await axios.get(`http://localhost:8000/api/ad/${id}`);
+      const response = await axios.get(`http://user.sold.dxg.world/api/ad/${id}`);
       setPost(response.data.data);
     } catch (error) {
       console.error('Error fetching post:', error);
@@ -29,7 +29,7 @@ const PostDetail = () => {
     if (!token || !post) return; // Check if token and post data are available
     try {
       const headers = { Authorization: `Bearer ${token}` };
-      const response = await axios.post('http://localhost:8000/api/conversations', { postId: post._id, postOwnerId: post.postedBy._id }, { headers });
+      const response = await axios.post('http://user.sold.dxg.world/api/conversations', { postId: post._id, postOwnerId: post.postedBy._id }, { headers });
       navigate(`/chats/${response.data.data._id}`);
     } catch (error) {
       console.error('Error starting chat:', error);

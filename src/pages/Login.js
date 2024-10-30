@@ -30,7 +30,7 @@ const Login = () => {
     setError('');
 
     try {
-      const response = await axios.post('http://localhost:8000/api/auth/login', formData);
+      const response = await axios.post('http://user.sold.dxg.world/api/auth/login', formData);
       if(response.data.success) {
         login(response.data.data);
         navigate('/');
