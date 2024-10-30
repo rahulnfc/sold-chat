@@ -19,37 +19,53 @@ const ResponsiveChatInterface = () => {
   const [message, setMessage] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const [conversationPage, setConversationPage] = useState(1);
+  const [totalConversations, setTotalConversations] = useState(0);
   const [messagePage, setMessagePage] = useState(1);
+  const [totalMessages, setTotalMessages] = useState(0);
+  const [isFetchingConversations, setIsFetchingConversations] = useState(false);
+  const [isFetchingMessages, setIsFetchingMessages] = useState(false);
   const typingTimeoutRef = useRef(null);
   const messagesEndRef = useRef(null);
 
   const headers = useMemo(() => ({ Authorization: `Bearer ${user?.token}` }), [user]);
 
   const fetchConversations = useCallback(async (page) => {
+    if (isFetchingConversations || (totalConversations > 0 && conversations.length >= totalConversations)) return; // Prevent fetching if already fetching or all conversations are loaded
+    setIsFetchingConversations(true);
+    
     try {
       const response = await axios.get(`http://localhost:8000/api/conversations?page=${page}&limit=10`, { headers });
-      const newConversations = response.data.data;
-
+      const newConversations = response.data.data.conversations;
+      setTotalConversations(response.data.data.totalCount);
       setConversations(prev => [
         ...prev.filter(prevConvo => !newConversations.some(newConvo => newConvo._id === prevConvo._id)),
         ...newConversations,
       ]);
     } catch (err) {
       console.error('Failed to fetch conversations', err);
+    } finally {
+      setIsFetchingConversations(false);
     }
-  }, [headers]);
+  }, [headers, conversations, totalConversations, isFetchingConversations]);
 
   const fetchMessages = useCallback(async (chatId, page) => {
+    if (isFetchingMessages || (totalMessages > 0 && messages.length >= totalMessages)) return; // Prevent fetching if already fetching or all messages are loaded
+    setIsFetchingMessages(true);
+    
     try {
       const response = await axios.get(`http://localhost:8000/api/messages/${chatId}?page=${page}&limit=10`, { headers });
-      const newMessages = response.data.data;
+      const newMessages = response.data.data.messages;
+      setTotalMessages(response.data.data.totalCount);
       setMessages(prev => [
         ...prev.filter(prevMessage => !newMessages.some(newMessage => newMessage._id === prevMessage._id)),
-        ...newMessages]);
+        ...newMessages
+      ]);
     } catch (err) {
       console.error('Failed to fetch messages', err);
+    } finally {
+      setIsFetchingMessages(false);
     }
-  }, [headers]);
+  }, [headers, messages, totalMessages, isFetchingMessages]);
 
   useEffect(() => {
     fetchConversations(conversationPage);
@@ -197,7 +213,7 @@ const ResponsiveChatInterface = () => {
             </div>
 
             <div onScroll={handleMessagesScroll} className="flex-1 overflow-y-auto p-4 bg-gray-50">
-              {messages.map((msg, index) => (
+              {messages.map((msg) => (
                 <div key={msg._id} className={`flex ${msg.senderId._id === user.id ? "justify-end" : "justify-start"} mb-4`}>
                   <div className={`max-w-[70%] rounded-lg p-3 ${msg.senderId._id === user.id ? "bg-gray-200 text-black" : "bg-red-500 text-white"}`}>
                     <p className="text-sm break-words">{msg.content}</p>
