@@ -113,8 +113,12 @@ const ResponsiveChatInterface = () => {
       });
 
       socket.on('message:new', (data) => {
-        setMessages(prev => [...prev, data.message]);
-      });
+        console.log("receive-message",data)
+
+        if(selectedChat?.id === data.conversationId){
+          setMessages((prevMessages) => [...prevMessages, data.message]);
+        }
+        });
 
       socket.on('conversation:typing', ({ conversationId, isTyping }) => {
         if (conversationId === selectedChat?.id) setIsTyping(isTyping);
@@ -143,15 +147,13 @@ const ResponsiveChatInterface = () => {
         socket.off("error"); 
       };
     }
-    if(selectedChat?.id){
-
-    }
-  }, [selectedChat?.id, socket]);
+  }, [conversations, selectedChat?.id, socket]);
 
 
   useEffect(() => {
     if (id) {
       const chat = chatList.find(c => c.id === id);
+      console.log('chat',chat)
       if (chat) handleChatSelect(chat);
     }
   }, [chatList,id]);
