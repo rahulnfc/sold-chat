@@ -14,7 +14,7 @@ const Home = () => {
   useEffect(() => {
     const fetchPosts = async () => {
       try {
-        const response = await axios.get('http://user.sold.dxg.world/api/ad?page=1&limit=10');
+        const response = await axios.get('https://sold.dxg.world/api/ad?page=1&limit=10');
         setPosts(response.data.data.ads);
         setLoading(false);
       } catch (err) {
@@ -35,7 +35,7 @@ const Home = () => {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {posts.map((post) => (
           <Card key={post._id} className="hover:shadow-lg transition-shadow">
-            <Image src={(!post.images[0] || post.images?.[0]?.includes('user.sold.dxg.world')) ? 'https://archive.org/download/placeholder-image/placeholder-image.jpg' : post.images[0]} alt={post.title} style={{ width: '100%', height: '200px', objectFit: 'cover' }} />
+            <Image src={(!post.images[0] || post.images?.[0]?.includes('sold.dxg.world')) ? 'https://archive.org/download/placeholder-image/placeholder-image.jpg' : post.images[0]} alt={post.title} style={{ width: '100%', height: '200px', objectFit: 'cover' }} />
             <CardHeader>
               <CardTitle>{post.title}</CardTitle>
             </CardHeader>

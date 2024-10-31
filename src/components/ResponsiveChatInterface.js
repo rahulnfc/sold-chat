@@ -6,14 +6,16 @@ import io from 'socket.io-client';
 import { Input } from './ui/input';
 import { Button } from './ui/button';
 import { useNavigate, useParams } from 'react-router-dom';
+import { useSocket } from '@/context/SocketContext';
 
 const ResponsiveChatInterface = () => {
+  const socket = useSocket();
   const { user } = useAuth();
   const { id } = useParams();
+
   const navigate = useNavigate();
   const [conversations, setConversations] = useState([]);
   const [messages, setMessages] = useState([]);
-  const [socket, setSocket] = useState(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [selectedChat, setSelectedChat] = useState(null);
   const [message, setMessage] = useState('');
@@ -29,12 +31,22 @@ const ResponsiveChatInterface = () => {
 
   const headers = useMemo(() => ({ Authorization: `Bearer ${user?.token}` }), [user]);
 
+
+  const chatList = useMemo(() => conversations.map(convo => ({
+    id: convo?._id,
+    title: convo?.postId?.title,
+    user: convo?.participants?.find(participant => participant._id !== user.id)?.name,
+    time: convo?.lastMessage?.timestamp ? new Date(convo.lastMessage.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "",
+    message: convo?.lastMessage?.message || "",
+    name: convo?.lastMessage?.senderId?._id === user.id ? "You" : convo.lastMessage?.senderId?.name || ""
+  })), [conversations, user.id]);
+
   const fetchConversations = useCallback(async (page) => {
     if (isFetchingConversations || (totalConversations > 0 && conversations.length >= totalConversations)) return; // Prevent fetching if already fetching or all conversations are loaded
     setIsFetchingConversations(true);
-    
+
     try {
-      const response = await axios.get(`http://user.sold.dxg.world/api/conversations?page=${page}&limit=10`, { headers });
+      const response = await axios.get(`https://sold.dxg.world/api/conversations?page=${page}&limit=10`, { headers });
       const newConversations = response.data.data.conversations;
       setTotalConversations(response.data.data.totalCount);
       setConversations(prev => [
@@ -49,11 +61,11 @@ const ResponsiveChatInterface = () => {
   }, [headers, conversations, totalConversations, isFetchingConversations]);
 
   const fetchMessages = useCallback(async (chatId, page) => {
-    if (isFetchingMessages || (totalMessages > 0 && messages.length >= totalMessages)) return; // Prevent fetching if already fetching or all messages are loaded
+    // if (isFetchingMessages || (totalMessages > 0 && messages.length >= totalMessages)) return; // Prevent fetching if already fetching or all messages are loaded
     setIsFetchingMessages(true);
-    
+
     try {
-      const response = await axios.get(`http://user.sold.dxg.world/api/messages/${chatId}?page=${page}&limit=10`, { headers });
+      const response = await axios.get(`https://sold.dxg.world/api/messages/${chatId}?page=${page}&limit=10`, { headers });
       const newMessages = response.data.data.messages;
       setTotalMessages(response.data.data.totalCount);
       setMessages(prev => [
@@ -65,20 +77,13 @@ const ResponsiveChatInterface = () => {
     } finally {
       setIsFetchingMessages(false);
     }
-  }, [headers, messages, totalMessages, isFetchingMessages]);
+  }, [headers]);
 
   useEffect(() => {
     fetchConversations(conversationPage);
-  }, [fetchConversations, conversationPage]);
+  }, [conversationPage, fetchConversations]);
 
-  const chatList = useMemo(() => conversations.map(convo => ({
-    id: convo._id,
-    title: convo.postId.title,
-    user: convo.participants.find(participant => participant._id !== user.id)?.name,
-    time: convo.lastMessage?.timestamp ? new Date(convo.lastMessage.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "",
-    message: convo.lastMessage?.message || "",
-    name: convo.lastMessage?.senderId?._id === user.id ? "You" : convo.lastMessage?.senderId?.name || ""
-  })), [conversations, user.id]);
+ 
 
   const handleChatSelect = (chat) => {
     setSelectedChat(chat);
@@ -89,38 +94,51 @@ const ResponsiveChatInterface = () => {
   };
 
   useEffect(() => {
-    if (!user || !user.token) return;
+    if (socket) {
 
-    const newSocket = io('http://user.sold.dxg.world', { auth: { token: user.token } });
-    setSocket(newSocket);
+      socket.on("receive-message", (message) => {
+        setMessages((prevMessages) => [...prevMessages, message]);
+      });
 
-    if (selectedChat?.id) newSocket.emit('join:conversation', selectedChat.id);
+      if (selectedChat?.id) socket.emit('join:conversation', selectedChat.id);
 
-    newSocket.on('message:new', (data) => {
-      setMessages(prev => [...prev, data.message]);
-    });
+      socket.on('message:new', (data) => {
+        setMessages(prev => [...prev, data.message]);
+      });
 
-    newSocket.on('conversation:typing', ({ conversationId, isTyping }) => {
-      if (conversationId === selectedChat?.id) setIsTyping(isTyping);
-    });
+      socket.on('conversation:typing', ({ conversationId, isTyping }) => {
+        if (conversationId === selectedChat?.id) setIsTyping(isTyping);
+      });
 
-    newSocket.on('message:read', ({ conversationId, messageIds, readAt }) => {
-      if (selectedChat?.id === conversationId) {
-        setMessages(prev => prev.map(msg => 
-          messageIds.includes(msg._id) ? { ...msg, status: 'read', readAt } : msg
-        ));
-      }
-    });
+      socket.on('message:read', ({ conversationId, messageIds, readAt }) => {
+        if (selectedChat?.id === conversationId) {
+          setMessages(prev => prev.map(msg =>
+            messageIds.includes(msg._id) ? { ...msg, status: 'read', readAt } : msg
+          ));
+        }
+      });
 
-    return () => newSocket.close();
-  }, [user, selectedChat?.id]);
+
+
+      return () => {
+        socket.off("receive-message"); 
+        socket.off("message:new"); 
+        socket.off("conversation:typing"); 
+        socket.off("message:read"); 
+      };
+    }
+    if(selectedChat?.id){
+
+    }
+  }, [selectedChat?.id, socket]);
+
 
   useEffect(() => {
     if (id) {
       const chat = chatList.find(c => c.id === id);
       if (chat) handleChatSelect(chat);
     }
-  }, [chatList, id]);
+  }, [chatList,id]);
 
   const handleSendMessage = () => {
     if (message.trim() && socket && selectedChat) {
@@ -166,6 +184,8 @@ const ResponsiveChatInterface = () => {
     }
   };
 
+  console.log("fasdfasdaaaa")
+
   return (
     <div className="flex h-screen bg-gray-100">
       <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="lg:hidden absolute top-4 left-4 z-50 p-2 rounded-lg bg-white shadow">
@@ -183,7 +203,10 @@ const ResponsiveChatInterface = () => {
           {chatList.map((chat) => (
             <div
               key={chat.id}
-              onClick={() => navigate(`/chats/${chat.id}`)}
+              onClick={() =>{
+                console.log('chat.id',chat.id)
+                navigate(`/chats/${chat.id}`)
+              } }
               className={`flex items-center p-4 border-b border-gray-200 cursor-pointer hover:bg-gray-50 transition-colors duration-200 ${selectedChat?.id === chat.id ? "bg-gray-50" : ""}`}
             >
               <div className="w-12 h-12 bg-gray-200 rounded-md"></div>

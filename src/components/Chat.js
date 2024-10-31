@@ -13,7 +13,7 @@ const Chat = ({ postId, postOwnerId }) => {
   const messagesEndRef = useRef(null);
 
   useEffect(() => {
-    const newSocket = io('http://user.sold.dxg.world');
+    const newSocket = io('https://sold.dxg.world');
     setSocket(newSocket);
 
     return () => newSocket.close();
