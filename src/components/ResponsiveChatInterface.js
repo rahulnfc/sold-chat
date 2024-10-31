@@ -98,8 +98,8 @@ const ResponsiveChatInterface = () => {
     if (socket) {
 
       socket.on("conversation:new", (conversation)=> {
-        console.log("conversation:new",conversation)
-        console.log("conversations",conversations)
+        console.log("conversation:new",JSON.stringify(conversation, null, 2))
+        console.log("conversations",JSON.stringify(conversations, null,2))
         socket.emit("conversation:join", conversation._id);
         setConversations(conversations => [conversation,...conversations]) 
       });
