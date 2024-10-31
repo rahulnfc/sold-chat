@@ -38,7 +38,8 @@ const ResponsiveChatInterface = () => {
     user: convo?.participants?.find(participant => participant._id !== user.id)?.name,
     time: convo?.lastMessage?.timestamp ? new Date(convo.lastMessage.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "",
     message: convo?.lastMessage?.message || "",
-    name: convo?.lastMessage?.senderId?._id === user.id ? "You" : convo.lastMessage?.senderId?.name || ""
+    name: convo?.lastMessage?.senderId?._id === user.id ? "You" : convo.lastMessage?.senderId?.name || "",
+    participants: convo?.participants
   })), [conversations, user.id]);
 
   const fetchConversations = useCallback(async (page) => {
@@ -144,7 +145,9 @@ const ResponsiveChatInterface = () => {
 
   const handleSendMessage = () => {
     if (message.trim() && socket && selectedChat) {
-      socket.emit('message:send', { conversationId: selectedChat.id, content: message });
+      const recieverId = selectedChat.participants?.find(participant => participant._id !== user.id)?._id;
+      console.log(recieverId, "<<<<<<< recieverId");
+      socket.emit('message:send', { conversationId: selectedChat.id, content: message, recieverId });
       setMessage('');
     }
   };
