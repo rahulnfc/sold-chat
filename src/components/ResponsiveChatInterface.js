@@ -96,11 +96,13 @@ const ResponsiveChatInterface = () => {
   useEffect(() => {
     if (socket) {
 
+      socket.on("conversation:new", (conversation)=> {
+        socket.emit("conversation:join", conversation._id);
+      });
+      
       socket.on("receive-message", (message) => {
         setMessages((prevMessages) => [...prevMessages, message]);
       });
-
-      if (selectedChat?.id) socket.emit('join:conversation', selectedChat.id);
 
       socket.on('message:new', (data) => {
         setMessages(prev => [...prev, data.message]);
