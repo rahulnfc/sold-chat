@@ -127,6 +127,10 @@ const ResponsiveChatInterface = () => {
         }
       });
 
+      socket.on('error', (error) => {
+        console.log('error',error)
+      });
+
 
 
       return () => {
@@ -135,6 +139,7 @@ const ResponsiveChatInterface = () => {
         socket.off("message:new"); 
         socket.off("conversation:typing"); 
         socket.off("message:read"); 
+        socket.off("error"); 
       };
     }
     if(selectedChat?.id){
