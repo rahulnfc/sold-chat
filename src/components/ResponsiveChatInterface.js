@@ -82,7 +82,7 @@ const ResponsiveChatInterface = () => {
 
   useEffect(() => {
     fetchConversations(conversationPage);
-  }, [conversationPage, fetchConversations]);
+  }, [conversationPage]);
 
  
 
@@ -98,11 +98,17 @@ const ResponsiveChatInterface = () => {
     if (socket) {
 
       socket.on("conversation:new", (conversation)=> {
+        console.log("conversation:new",conversation)
         socket.emit("conversation:join", conversation._id);
+        setConversations(conversations => [conversation,...conversations]) 
       });
       
-      socket.on("receive-message", (message) => {
-        setMessages((prevMessages) => [...prevMessages, message]);
+      socket.on("receive-message", (payload) => {
+        console.log("receive-message",payload)
+
+        if(selectedChat?.id === payload.conversationId){
+          setMessages((prevMessages) => [...prevMessages, payload.message]);
+        }
       });
 
       socket.on('message:new', (data) => {
@@ -124,6 +130,7 @@ const ResponsiveChatInterface = () => {
 
 
       return () => {
+        socket.off("conversation:new"); 
         socket.off("receive-message"); 
         socket.off("message:new"); 
         socket.off("conversation:typing"); 
@@ -172,7 +179,7 @@ const ResponsiveChatInterface = () => {
 
   useEffect(() => {
     if (selectedChat) handleMarkMessagesAsRead();
-  }, [selectedChat, messages, handleMarkMessagesAsRead]);
+  }, [selectedChat, messages]);
 
   // Infinite scrolling for conversations
   const handleConversationScroll = (e) => {
@@ -189,7 +196,6 @@ const ResponsiveChatInterface = () => {
     }
   };
 
-  console.log("fasdfasdaaaa")
 
   return (
     <div className="flex h-screen bg-gray-100">
